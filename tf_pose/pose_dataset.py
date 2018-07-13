@@ -71,7 +71,7 @@ class CocoMetadata:
         self.width = int(img_meta['width'])
 
         joint_list = []
-		self.bbox_list = []
+        self.bbox_list = []
         for ann in annotations:
             if ann.get('num_keypoints', 0) == 0:
                 continue
@@ -82,8 +82,8 @@ class CocoMetadata:
             vs = kp[2::3]
 
             joint_list.append([(x, y) if v >= 1 else (-1000, -1000) for x, y, v in zip(xs, ys, vs)])
-			x_y_w_h = np.array(ann['bbox'])
-			self.bbox_list.append(x_y_w_h)
+            x_y_w_h = np.array(ann['bbox'])
+            self.bbox_list.append(x_y_w_h)
 
         self.joint_list = []
         transform = list(zip(
@@ -211,10 +211,10 @@ class CocoMetadata:
                 vectormap[plane_idx*2+0][y][x] = vec_x
                 vectormap[plane_idx*2+1][y][x] = vec_y
 
-	def get_bbox()
-
-	@@staticmethod
-	def put_bbox()
+    def get_bbox(self):
+        bbox = self.bbox
+        bbox = np.reshape(bbox, (-1, 4))
+        return bbox.astype(np.float16)
 
 
 class CocoPose(RNGDataFlow):
@@ -312,7 +312,8 @@ class CocoPose(RNGDataFlow):
             meta = CocoMetadata(idx, img_url, img_meta, anns, sigma=8.0)
 
             total_keypoints = sum([ann.get('num_keypoints', 0) for ann in anns])
-            if total_keypoints == 0 and random.uniform(0, 1) > 0.2 and :
+            if total_keypoints == 0 and random.uniform(0, 1) > 0.2:
+
                 continue
 
             yield [meta]

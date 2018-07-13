@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from tf_pose import network_base
 import tensorflow as tf
 
+_ANCHORS = [(10,14),  (23,27),  (37,58),  (81,82),  (135,169),  (344,319)]
 
 class CmuNetwork(network_base.BaseNetwork):
     def setup(self):
@@ -22,7 +23,7 @@ class CmuNetwork(network_base.BaseNetwork):
              .conv(3, 3, 512, 1, 1, name='conv4_1')
              .conv(3, 3, 512, 1, 1, name='conv4_2')
              .conv(3, 3, 256, 1, 1, name='conv4_3_CPM')
-             .conv(3, 3, 128, 1, 1, name='conv4_4_CPM')          # *****
+             .conv(3, 3, 128, 1, 1, name='conv4_4_CPM')
 
              .conv(3, 3, 128, 1, 1, name='conv5_1_CPM_L1')
              .conv(3, 3, 128, 1, 1, name='conv5_2_CPM_L1')
@@ -54,16 +55,18 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(256, 3, name='yolo_conv1_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv1_9')
             .upsample([None, 128, 23, 23], name='upsample1_1')
-            .upsample([None, 128, 46, 46], name='upsample1_2'))
+            .upsample([None, 128, 46, 46], name='upsample1_2', transpose=True))
 
         (self.feed('yolo_conv1_8')
-            .conv2d_fixed_padding(512, 3, name='yolo_conv1_10'))
+            .conv2d_fixed_padding(512, 3, name='yolo_conv1_10')
+            .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect1_1'))
 
         (self.feed('yolo_conv1_5', 'upsample1_1')
             .contact(1, name='yolo_concat1_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv1_11'))
+            .conv2d_fixed_padding((256, 3), name='yolo_conv1_11')
+            .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect1_2'))
         
-        (self.feed('yolo_conv1_11', 'yolo_conv1_10')
+        (self.feed('detect1_1', 'detect1_2')
             .contact(1, name='yolo_concat1_2')
             .detections_boxes(name='boxes1'))
 
@@ -103,16 +106,18 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(256, 3, name='yolo_conv2_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv2_9')
             .upsample([None, 128, 23, 23], name='upsample2_1')
-            .upsample([None, 128, 46, 46], anme='upsample2_2'))
+            .upsample([None, 128, 46, 46], anme='upsample2_2', transpose=True))
 
         (self.feed('yolo_conv2_8')
-            .conv2d_fixed_padding(512, 3, name='yolo_conv2_10'))
+            .conv2d_fixed_padding(512, 3, name='yolo_conv2_10')
+            .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect2_1'))
 
         (self.feed('yolo_conv2_5', 'upsample2_1')
             .contact(1, name='yolo_concat2_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv2_11'))
+            .conv2d_fixed_padding((256, 3), name='yolo_conv2_11')
+            .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect2_2'))
         
-        (self.feed('yolo_conv2_11', 'yolo_conv2_10')
+        (self.feed('detect2_1', 'detect2_2')
             .contact(1, name='yolo_concat2_2')
             .detections_boxes(name='boxes2'))
 
@@ -153,16 +158,18 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(256, 3, name='yolo_conv3_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv3_9')
             .upsample([None, 128, 23, 23], name='upsample3_1')
-            .upsample([None, 128, 46, 46], anme='upsample3_2'))
+            .upsample([None, 128, 46, 46], anme='upsample3_2', transpose=True))
 
         (self.feed('yolo_conv3_8')
-            .conv2d_fixed_padding(512, 3, name='yolo_conv3_10'))
+            .conv2d_fixed_padding(512, 3, name='yolo_conv3_10')
+            .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect3_1'))
 
         (self.feed('yolo_conv3_5', 'upsample3_1')
             .contact(1, name='yolo_concat3_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv3_11'))
+            .conv2d_fixed_padding((256, 3), name='yolo_conv3_11')
+            .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect3_2'))
         
-        (self.feed('yolo_conv3_11', 'yolo_conv3_10')
+        (self.feed('detect3_1', 'detect3_2')
             .contact(1, name='yolo_concat3_2')
             .detections_boxes(name='boxes3'))
 
@@ -202,16 +209,18 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(256, 3, name='yolo_conv4_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv4_9')
             .upsample([None, 128, 23, 23], name='upsample4_1')
-            .upsample([None, 128, 46, 46], anme='upsample4_2'))
+            .upsample([None, 128, 46, 46], anme='upsample4_2', transpose=True))
 
         (self.feed('yolo_conv4_8')
-            .conv2d_fixed_padding(512, 3, name='yolo_conv4_10'))
+            .conv2d_fixed_padding(512, 3, name='yolo_conv4_10')
+            .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect4_1'))
 
         (self.feed('yolo_conv4_5', 'upsample4_1')
             .contact(1, name='yolo_concat4_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv4_11'))
+            .conv2d_fixed_padding((256, 3), name='yolo_conv4_11')
+            .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect4_2'))
         
-        (self.feed('yolo_conv4_11', 'yolo_conv4_10')
+        (self.feed('detect4_1', 'detect4_2')
             .contact(1, name='yolo_concat4_2')
             .detections_boxes(name='boxes4'))
 
@@ -252,16 +261,18 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(256, 3, name='yolo_conv5_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv5_9')
             .upsample([None, 128, 23, 23], name='upsample5_1')
-            .upsample([None, 128, 46, 46], anme='upsample5_2'))
+            .upsample([None, 128, 46, 46], anme='upsample5_2', transpose=True))
 
         (self.feed('yolo_conv5_8')
-            .conv2d_fixed_padding(512, 3, name='yolo_conv5_10'))
+            .conv2d_fixed_padding(512, 3, name='yolo_conv5_10')
+            .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect5_1'))
 
         (self.feed('yolo_conv5_5', 'upsample5_1')
             .contact(1, name='yolo_concat5_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv5_11'))
+            .conv2d_fixed_padding((256, 3), name='yolo_conv5_11')
+            .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect5_2'))
         
-        (self.feed('yolo_conv5_11', 'yolo_conv5_10')
+        (self.feed('detect5_1', 'detect5_2')
             .contact(1, name='yolo_concat5_2')
             .detections_boxes(name='boxes5'))
 
@@ -301,16 +312,18 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(256, 3, name='yolo_conv6_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv6_9')
             .upsample([None, 128, 23, 23], name='upsample6_1')
-            .upsample([None, 128, 46, 46], anme='upsample6_2'))
+            .upsample([None, 128, 46, 46], anme='upsample6_2', transpose=True))
     
         (self.feed('yolo_conv6_8')
-            .conv2d_fixed_padding(512, 3, name='yolo_conv6_10'))
+            .conv2d_fixed_padding(512, 3, name='yolo_conv6_10')
+            .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect6_1'))
 
         (self.feed('yolo_conv6_5', 'upsample6_1')
             .contact(1, name='yolo_concat6_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv6_11'))
+            .conv2d_fixed_padding((256, 3), name='yolo_conv6_11')
+            .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect6_2'))
         
-        (self.feed('yolo_conv6_11', 'yolo_conv6_10')
+        (self.feed('detect6_1', 'detect6_1')
             .contact(1, name='yolo_concat6_2')
             .detections_boxes(name='boxes6'))
 
@@ -327,7 +340,7 @@ class CmuNetwork(network_base.BaseNetwork):
                    l1s.append(self.layers[layer_name])
               if 'Mconv7' in layer_name and '_L2' in layer_name:
                    l2s.append(self.layers[layer_name])
-              if 'yolo_concat' in layer_name and '_2' in layer_name:
+              if 'boxes' in layer_name:
                    l3s.append(self.layers[layer_name])
 
          return l1s, l2s, l3s

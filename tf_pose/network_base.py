@@ -17,7 +17,9 @@ _init_norm = tf.truncated_normal_initializer(stddev=0.01)
 _init_zero = slim.init_ops.zeros_initializer()
 _l2_regularizer_00004 = tf.contrib.layers.l2_regularizer(0.00004)
 _l2_regularizer_convb = tf.contrib.layers.l2_regularizer(common.regularizer_conv)
-
+_BATCH_NORM_DECAY = 0.9
+_BATCH_NORM_EPSILON = 1e-05
+_LEAKY_RELU = 0.1
 
 def layer(op):
     '''
@@ -357,7 +359,14 @@ class BaseNetwork(object):
     def conv2d_fixed_padding(self, inputs, filters, kernel_size, name, strides=1):
         if strides > 1:
             inputs = fixed_padding(inputs, kernel_size)
-        inputs = slim.conv2d(inputs, filters, kernel_size, stride=strides, padding=('SAME' if strides == 1 else 'VALID'), scope=name)
+        batch_norm_params = {
+        'decay': _BATCH_NORM_DECAY,
+        'epsilon': _BATCH_NORM_EPSILON,
+        'scale': True,
+        'is_training': True,
+        'fused': None,  # Use fused batch norm if possible.
+        }
+        inputs = slim.conv2d(inputs, filters, kernel_size, stride=strides, padding=('SAME' if strides == 1 else 'VALID'), data_format='NCHW', normalizer_fn=slim.batch_norm, normalizer_params=batch_norm_params, biases_initializer=None, activation_fn=lambda x: tf.nn.leaky_relu(x, alpha=_LEAKY_RELU), reuse=False, scope=name)
         return inputs
 
     @layer
@@ -389,7 +398,7 @@ class BaseNetwork(object):
         return inputs
 
     @layer
-    def upsample(self, inputs, route_1, data_format='NCHW', name):
+    def upsample(self, inputs, route_1, name, data_format='NCHW', transpose=False):
         # we need to pad with one pixel, so we set kernel_size = 3
         out_shape = route_1.get_shape().as_list()
         inputs = fixed_padding(inputs, 3, mode='SYMMETRIC')
@@ -420,26 +429,79 @@ class BaseNetwork(object):
             inputs = tf.transpose(inputs, [0, 3, 1, 2])
 
         inputs = tf.identity(inputs, name=name)
+        if transpose == True:
+            inputs = tf.transpose(inputs, perm=[0, 46, 46, 0]) # 0 means that dimention will be same as earlier, last 0 will contain the left over dimentions
         return inputs
 
-	@layer	
-	def detections_boxes(self, inputs, name):
-		"""
-		Converts center x, center y, width and height values to coordinates of top left and bottom right points.
+    def get_size(shape, data_format):
+        if len(shape) == 4:
+            shape = shape[1:]
+        return shape[1:3] if data_format == 'NCHW' else shape[0:2]
 
+    @layer
+    def detection_layer(self, inputs, num_classes, anchors, img_size, name):
+        num_anchors = len(anchors)
+        predictions = slim.conv2d(inputs, num_anchors * (5 + num_classes), 1, stride=1, normalizer_fn=None,
+		                          activation_fn=None, biases_initializer=tf.zeros_initializer(), data_format='NCHW')
+
+        shape = predictions.get_shape().as_list()
+        grid_size = get_size(shape, data_format)
+        dim = grid_size[0] * grid_size[1]
+        bbox_attrs = 5 + num_classes
+
+        if data_format == 'NCHW':
+            predictions = tf.reshape(predictions, [-1, num_anchors * bbox_attrs, dim])
+            predictions = tf.transpose(predictions, [0, 2, 1])
+
+        predictions = tf.reshape(predictions, [-1, num_anchors * dim, bbox_attrs])
+
+        stride = (img_size[0] // grid_size[0], img_size[1] // grid_size[1])
+
+        anchors = [(a[0] / stride[0], a[1] / stride[1]) for a in anchors]
+
+        box_centers, box_sizes, confidence, classes = tf.split(predictions, [2, 2, 1, num_classes], axis=-1)
+
+        box_centers = tf.nn.sigmoid(box_centers)
+        confidence = tf.nn.sigmoid(confidence)
+
+        grid_x = tf.range(grid_size[0], dtype=tf.float32)
+        grid_y = tf.range(grid_size[1], dtype=tf.float32)
+        a, b = tf.meshgrid(grid_x, grid_y)
+
+        x_offset = tf.reshape(a, (-1, 1))
+        y_offset = tf.reshape(b, (-1, 1))
+
+        x_y_offset = tf.concat([x_offset, y_offset], axis=-1)
+        x_y_offset = tf.reshape(tf.tile(x_y_offset, [1, num_anchors]), [1, -1, 2])
+
+        box_centers = box_centers + x_y_offset
+        box_centers = box_centers * stride
+
+        anchors = tf.tile(anchors, [dim, 1])
+        box_sizes = tf.exp(box_sizes) * anchors
+        box_sizes = box_sizes * stride
+
+        detections = tf.concat([box_centers, box_sizes, confidence], axis=-1)
+
+        classes = tf.nn.sigmoid(classes)
+        predictions = tf.concat([detections, classes], axis=-1, name=name)
+        return predictions
+
+    @layer
+    def detections_boxes(self, inputs, name):
+        """
+		Converts center x, center y, width and height values to coordinates of top left and bottom right points.
 		:param detections: outputs of YOLO v3 detector of shape (?, 10647, (num_classes + 5))
 		:return: converted detections of same shape as input
 		"""
-		center_x, center_y, width, height, attrs = tf.split(detections, [1, 1, 1, 1, -1], axis=-1)
-		w2 = width / 2
-		h2 = height / 2
-		x0 = center_x - w2
-		y0 = center_y - h2
-		x1 = center_x + w2
-		y1 = center_y + h2
-
-		boxes = tf.concat([x0, y0, x1, y1], axis=-1)
-		detections = tf.concat([boxes, attrs], axis=-1, name=name)
-		return detections
-
+        center_x, center_y, width, height, attrs = tf.split(detections, [1, 1, 1, 1, -1], axis=-1)
+        w2 = width / 2
+        h2 = height / 2
+        x0 = center_x - w2
+        y0 = center_y - h2
+        x1 = center_x + w2
+        y1 = center_y + h2
+        boxes = tf.concat([x0, y0, x1, y1], axis=-1)
+        detections = tf.concat([boxes, attrs], axis=-1, name=name)
+        return detections
 	

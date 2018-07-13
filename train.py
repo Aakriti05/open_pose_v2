@@ -17,6 +17,8 @@ from tf_pose.pose_augment import set_network_input_wh, set_network_scale
 from tf_pose.common import get_sample_images
 from tf_pose.networks import get_network
 
+
+
 logger = logging.getLogger('train')
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
@@ -30,7 +32,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training codes for Openpose using Tensorflow')
     parser.add_argument('--model', default='cmu', help='model name') #personlab_resnet101
     print('!!!!!!!!!!!')
-    parser.add_argument('--imgpath', type=str, default='/mnt/HDD20TB/akki/tfopenpose/tf-openpose/')#/data/public/rw/coco/
+    parser.add_argument('--imgpath', type=str, default='/mnt/HDD20TB/akki/tfopenpose/aakriti/')#/data/public/rw/coco/
     parser.add_argument('--batchsize', type=int, default=16)
     parser.add_argument('--gpus', type=int, default=2)
     parser.add_argument('--max_epoch', type=int, default=3)
@@ -41,9 +43,9 @@ if __name__ == '__main__':
     parser.add_argument('--tag', type=str, default='')
     parser.add_argument('--remote_data', type=str, default='', help='eg. tcp://0.0.0.0:1027')
 
-    parser.add_argument('--input_width', type=int, default=368)
-    parser.add_argument('--input_height', type=int, default=368)
-    parser.add_argument('--datapath', type=str, default='/mnt/HDD20TB/akki/tfopenpose/tf-openpose/annotations') #/data/public/rw/coco/annotations
+    parser.add_argument('--input_width', type=int, default=416)
+    parser.add_argument('--input_height', type=int, default=416)
+    parser.add_argument('--datapath', type=str, default='/mnt/HDD20TB/akki/tfopenpose/aakriti/annotations') #/data/public/rw/coco/annotations
     args = parser.parse_args()
     print('epochs:', args.max_epoch)
     if args.gpus <= 0:
@@ -88,6 +90,7 @@ if __name__ == '__main__':
     logger.info(q_inp)
     logger.info(q_heat)
     logger.info(q_vect)
+    logger.info(q_obj)
 
     # define model for multi-gpu
     q_inp_split, q_heat_split, q_vect_split, q_obj_split = tf.split(q_inp, args.gpus), tf.split(q_heat, args.gpus), tf.split(q_vect, args.gpus), tf.split(q_obj, args.gpus)
@@ -99,7 +102,7 @@ if __name__ == '__main__':
     losses = []
     last_losses_l1 = []
     last_losses_l2 = []
-	last_losses_l3 = []
+    last_losses_l3 = []
     outputs = []
     for gpu_id in range(args.gpus):
         with tf.device(tf.DeviceSpec(device_type="GPU", device_index=gpu_id)):
@@ -108,19 +111,19 @@ if __name__ == '__main__':
                 vect, heat, obj = net.loss_last()
                 output_vectmap.append(vect)
                 output_heatmap.append(heat)
-				output_object.append(obj)
+                output_object.append(obj)
                 outputs.append(net.get_output()) #output of heat_paf_upsample concatnated
 
                 l1s, l2s, l3s = net.loss_l1_l2_l3()
                 for idx, (l1, l2, l3) in enumerate(zip(l1s, l2s, l3s)):
                     loss_l1 = tf.nn.l2_loss(tf.concat(l1, axis=0) - q_vect_split[gpu_id], name='loss_l1_stage%d_tower%d' % (idx, gpu_id))
                     loss_l2 = tf.nn.l2_loss(tf.concat(l2, axis=0) - q_heat_split[gpu_id], name='loss_l2_stage%d_tower%d' % (idx, gpu_id))
-					loss_l3 = tf.nn.l2_loss(tf.concat(l3, axis=0) - q_obj_split[gpu_id], name='loss_l3_stage%d_tower%d' % (idx, gpu_id))
+                    loss_l3 = tf.nn.l2_loss(tf.concat(l3, axis=0) - q_obj_split[gpu_id], name='loss_l3_stage%d_tower%d' % (idx, gpu_id))
                     losses.append(tf.reduce_mean([loss_l1, loss_l2, loss_l3]))
 
                 last_losses_l1.append(loss_l1)
                 last_losses_l2.append(loss_l2)
-				last_losses_l3.append(loss_l3)
+                last_losses_l3.append(loss_l3)
 
     outputs = tf.concat(outputs, axis=0)
 
@@ -187,7 +190,7 @@ if __name__ == '__main__':
         )
         logger.info('model weights initialization')
         sess.run(tf.global_variables_initializer())
-		'''
+        '''
         if args.checkpoint:
             logger.info('Restore from checkpoint...')
             # loader = tf.train.Saver(net.restorable_variables())
@@ -202,7 +205,7 @@ if __name__ == '__main__':
             elif '.npy' in pretrain_path:
                 net.load(pretrain_path, sess, False)
             logger.info('Restore pretrained weights...Done')
-		'''
+        '''
         logger.info('prepare file writer')
         file_writer = tf.summary.FileWriter(args.logpath + training_name, sess.graph)
 
