@@ -119,6 +119,29 @@ class BaseNetwork(object):
             self.terminals.append(fed_layer)
         return self
 
+    def fixed_padding(self, inputs, kernel_size, mode='CONSTANT'):
+        """
+        Pads the input along the spatial dimensions independently of input size.
+        Args:
+          inputs: A tensor of size [batch, channels, height_in, width_in] or
+            [batch, height_in, width_in, channels] depending on data_format.
+          kernel_size: The kernel to be used in the conv2d or max_pool2d operation.
+                       Should be a positive integer.
+          data_format: The input format ('NHWC' or 'NCHW').
+          mode: The mode for tf.pad.
+        Returns:
+          A tensor with the same format as the input with the data either intact
+          (if kernel_size == 1) or padded (if kernel_size > 1).
+        """
+        pad_total = kernel_size - 1
+        pad_beg = pad_total // 2
+        pad_end = pad_total - pad_beg
+
+        padded_inputs = tf.pad(inputs, [[0, 0], [0, 0], [pad_beg, pad_end], [pad_beg, pad_end]], mode=mode)
+        
+        return padded_inputs
+
+
     def get_output(self, name=None):
         '''Returns the current network output.'''
         if not name:
@@ -251,6 +274,7 @@ class BaseNetwork(object):
             if relu:
                 # ReLU non-linearity
                 output = tf.nn.relu(output, name=scope.name)
+            print(output)
             return output
 
     @layer
@@ -356,9 +380,12 @@ class BaseNetwork(object):
 
 
     @layer
-    def conv2d_fixed_padding(self, inputs, filters, kernel_size, name, strides=1):
+    def conv2d_fixed_padding(self, inputs, filters, kernel_size, name, strides=1, transpose=False):
+        print("entering",inputs)
+        if transpose==True:
+            inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
         if strides > 1:
-            inputs = fixed_padding(inputs, kernel_size)
+            inputs = self.fixed_padding(inputs, kernel_size)
         batch_norm_params = {
         'decay': _BATCH_NORM_DECAY,
         'epsilon': _BATCH_NORM_EPSILON,
@@ -367,41 +394,20 @@ class BaseNetwork(object):
         'fused': None,  # Use fused batch norm if possible.
         }
         inputs = slim.conv2d(inputs, filters, kernel_size, stride=strides, padding=('SAME' if strides == 1 else 'VALID'), data_format='NCHW', normalizer_fn=slim.batch_norm, normalizer_params=batch_norm_params, biases_initializer=None, activation_fn=lambda x: tf.nn.leaky_relu(x, alpha=_LEAKY_RELU), reuse=False, scope=name)
+        print("exiting", inputs)
         return inputs
 
     @layer
-    def fixed_padding(self, inputs, kernel_size, mode='CONSTANT'):
-        """
-        Pads the input along the spatial dimensions independently of input size.
-        Args:
-          inputs: A tensor of size [batch, channels, height_in, width_in] or
-            [batch, height_in, width_in, channels] depending on data_format.
-          kernel_size: The kernel to be used in the conv2d or max_pool2d operation.
-                       Should be a positive integer.
-          data_format: The input format ('NHWC' or 'NCHW').
-          mode: The mode for tf.pad.
-        Returns:
-          A tensor with the same format as the input with the data either intact
-          (if kernel_size == 1) or padded (if kernel_size > 1).
-        """
-        pad_total = kernel_size - 1
-        pad_beg = pad_total // 2
-        pad_end = pad_total - pad_beg
-
-        padded_inputs = tf.pad(inputs, [[0, 0], [0, 0], [pad_beg, pad_end], [pad_beg, pad_end]], mode=mode)
-        
-        return padded_inputs
-
-    @layer
-    def max_pool2d(self, inputs, filter_size, name):
-        inputs = slim.max_pool2d(inputs, filter_size, data_format='NCHW', scope=name)
+    def max_pool2d(self, inputs, filter_size, name, stride=2):        
+        inputs = slim.max_pool2d(inputs, filter_size, stride, data_format='NCHW', scope=name)
+        print(inputs)
         return inputs
 
     @layer
     def upsample(self, inputs, route_1, name, data_format='NCHW', transpose=False):
         # we need to pad with one pixel, so we set kernel_size = 3
-        out_shape = route_1.get_shape().as_list()
-        inputs = fixed_padding(inputs, 3, mode='SYMMETRIC')
+        out_shape = route_1
+        inputs = self.fixed_padding(inputs, 3, mode='SYMMETRIC')
 
         # tf.image.resize_bilinear accepts input in format NHWC
         if data_format == 'NCHW':
@@ -430,10 +436,11 @@ class BaseNetwork(object):
 
         inputs = tf.identity(inputs, name=name)
         if transpose == True:
-            inputs = tf.transpose(inputs, perm=[0, 46, 46, 0]) # 0 means that dimention will be same as earlier, last 0 will contain the left over dimentions
+            inputs = tf.transpose(inputs, perm=[0, 2, 3, 1]) # 0 means that dimention will be same as earlier, last 0 will contain the left over dimentions
+        print(inputs)
         return inputs
 
-    def get_size(shape, data_format):
+    def get_size(self, shape, data_format):
         if len(shape) == 4:
             shape = shape[1:]
         return shape[1:3] if data_format == 'NCHW' else shape[0:2]
@@ -441,11 +448,12 @@ class BaseNetwork(object):
     @layer
     def detection_layer(self, inputs, num_classes, anchors, img_size, name):
         num_anchors = len(anchors)
-        predictions = slim.conv2d(inputs, num_anchors * (5 + num_classes), 1, stride=1, normalizer_fn=None,
-		                          activation_fn=None, biases_initializer=tf.zeros_initializer(), data_format='NCHW')
-
+        data_format='NCHW'
+        print(inputs)
+        predictions = slim.conv2d(inputs, num_anchors * (5 + num_classes), 1, stride=1, normalizer_fn=None, activation_fn=None, biases_initializer=tf.zeros_initializer(), data_format='NCHW')
         shape = predictions.get_shape().as_list()
-        grid_size = get_size(shape, data_format)
+        grid_size = self.get_size(shape, data_format)
+        print("grid_size", grid_size)
         dim = grid_size[0] * grid_size[1]
         bbox_attrs = 5 + num_classes
 
@@ -454,8 +462,9 @@ class BaseNetwork(object):
             predictions = tf.transpose(predictions, [0, 2, 1])
 
         predictions = tf.reshape(predictions, [-1, num_anchors * dim, bbox_attrs])
-
+        print("img_size", img_size)
         stride = (img_size[0] // grid_size[0], img_size[1] // grid_size[1])
+        print("stride", stride)
 
         anchors = [(a[0] / stride[0], a[1] / stride[1]) for a in anchors]
 
@@ -485,6 +494,7 @@ class BaseNetwork(object):
 
         classes = tf.nn.sigmoid(classes)
         predictions = tf.concat([detections, classes], axis=-1, name=name)
+        print(predictions)
         return predictions
 
     @layer
@@ -494,7 +504,7 @@ class BaseNetwork(object):
 		:param detections: outputs of YOLO v3 detector of shape (?, 10647, (num_classes + 5))
 		:return: converted detections of same shape as input
 		"""
-        center_x, center_y, width, height, attrs = tf.split(detections, [1, 1, 1, 1, -1], axis=-1)
+        center_x, center_y, width, height, attrs = tf.split(inputs, [1, 1, 1, 1, -1], axis=-1)
         w2 = width / 2
         h2 = height / 2
         x0 = center_x - w2

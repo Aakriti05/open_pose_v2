@@ -39,7 +39,7 @@ class CmuNetwork(network_base.BaseNetwork):
              .conv(1, 1, 19, 1, 1, relu=False, name='conv5_5_CPM_L2'))
 
         (self.feed('image')
-            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv1_1')
+            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv1_1', transpose=True)
             .max_pool2d([2, 2], name='pool2_1_1')
             .conv2d_fixed_padding(16*pow(2,1), 3, name='yolo_conv1_2')
             .max_pool2d([2, 2], name='pool2_1_2')
@@ -50,25 +50,23 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(16*pow(2,4), 3, name='yolo_conv1_5')
             .max_pool2d([2, 2], name='pool2_1_5')
             .conv2d_fixed_padding(16*pow(2,5), 3, name='yolo_conv1_6')
-            .max_pool2d([2, 2], name='pool2_1_6')
             .conv2d_fixed_padding(1024, 3, name='yolo_conv1_7')
             .conv2d_fixed_padding(256, 3, name='yolo_conv1_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv1_9')
-            .upsample([None, 128, 23, 23], name='upsample1_1')
-            .upsample([None, 128, 46, 46], name='upsample1_2', transpose=True))
+            .upsample([None, 128, 26, 26], name='upsample1_1')
+            .upsample([None, 128, 52, 52], name='upsample1_2', transpose=True))
 
         (self.feed('yolo_conv1_8')
             .conv2d_fixed_padding(512, 3, name='yolo_conv1_10')
             .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect1_1'))
 
         (self.feed('yolo_conv1_5', 'upsample1_1')
-            .contact(1, name='yolo_concat1_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv1_11')
+            .concat(1, name='yolo_concat1_1')
+            .conv2d_fixed_padding(256, 3, name='yolo_conv1_11')
             .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect1_2'))
         
         (self.feed('detect1_1', 'detect1_2')
-            .contact(1, name='yolo_concat1_2')
-            .detections_boxes(name='boxes1'))
+            .concat(1, name='yolo_concat1_2'))
 
         (self.feed('conv5_5_CPM_L1', 'conv5_5_CPM_L2', 'conv4_4_CPM', 'upsample1_2')
              .concat(3, name='concat_stage2')
@@ -89,8 +87,8 @@ class CmuNetwork(network_base.BaseNetwork):
              .conv(1, 1, 128, 1, 1, name='Mconv6_stage2_L2')
              .conv(1, 1, 19, 1, 1, relu=False, name='Mconv7_stage2_L2'))
 
-        (self.feed('concat_stage2')
-            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv2_1')
+        (self.feed('image')
+            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv2_1', transpose=True)
             .max_pool2d([2, 2], name='pool2_2_1')
             .conv2d_fixed_padding(16*pow(2,1), 3, name='yolo_conv2_2')
             .max_pool2d([2, 2], name='pool2_2_2')
@@ -101,25 +99,23 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(16*pow(2,4), 3, name='yolo_conv2_5')
             .max_pool2d([2, 2], name='pool2_2_5')
             .conv2d_fixed_padding(16*pow(2,5), 3, name='yolo_conv2_6')
-            .max_pool2d([2, 2], name='pool2_2_6')
             .conv2d_fixed_padding(1024, 3, name='yolo_conv2_7')
             .conv2d_fixed_padding(256, 3, name='yolo_conv2_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv2_9')
-            .upsample([None, 128, 23, 23], name='upsample2_1')
-            .upsample([None, 128, 46, 46], anme='upsample2_2', transpose=True))
+            .upsample([None, 128, 26, 26], name='upsample2_1')
+            .upsample([None, 128, 52, 52], name='upsample2_2', transpose=True))
 
         (self.feed('yolo_conv2_8')
             .conv2d_fixed_padding(512, 3, name='yolo_conv2_10')
             .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect2_1'))
 
         (self.feed('yolo_conv2_5', 'upsample2_1')
-            .contact(1, name='yolo_concat2_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv2_11')
+            .concat(1, name='yolo_concat2_1')
+            .conv2d_fixed_padding(256, 3, name='yolo_conv2_11')
             .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect2_2'))
         
         (self.feed('detect2_1', 'detect2_2')
-            .contact(1, name='yolo_concat2_2')
-            .detections_boxes(name='boxes2'))
+            .concat(1, name='yolo_concat2_2'))
 
 
         (self.feed('Mconv7_stage2_L1', 'Mconv7_stage2_L2', 'conv4_4_CPM', 'upsample2_2')
@@ -141,8 +137,8 @@ class CmuNetwork(network_base.BaseNetwork):
              .conv(1, 1, 128, 1, 1, name='Mconv6_stage3_L2')
              .conv(1, 1, 19, 1, 1, relu=False, name='Mconv7_stage3_L2'))
 
-        (self.feed('concat_stage3')
-            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv3_1')
+        (self.feed('image')
+            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv3_1', transpose=True)
             .max_pool2d([2, 2], name='pool2_3_1')
             .conv2d_fixed_padding(16*pow(2,1), 3, name='yolo_conv3_2')
             .max_pool2d([2, 2], name='pool2_3_2')
@@ -153,25 +149,23 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(16*pow(2,4), 3, name='yolo_conv3_5')
             .max_pool2d([2, 2], name='pool2_3_5')
             .conv2d_fixed_padding(16*pow(2,5), 3, name='yolo_conv3_6')
-            .max_pool2d([2, 2], name='pool2_3_6')
             .conv2d_fixed_padding(1024, 3, name='yolo_conv3_7')
             .conv2d_fixed_padding(256, 3, name='yolo_conv3_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv3_9')
-            .upsample([None, 128, 23, 23], name='upsample3_1')
-            .upsample([None, 128, 46, 46], anme='upsample3_2', transpose=True))
+            .upsample([None, 128, 26, 26], name='upsample3_1')
+            .upsample([None, 128, 52, 52], name='upsample3_2', transpose=True))
 
         (self.feed('yolo_conv3_8')
             .conv2d_fixed_padding(512, 3, name='yolo_conv3_10')
             .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect3_1'))
 
         (self.feed('yolo_conv3_5', 'upsample3_1')
-            .contact(1, name='yolo_concat3_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv3_11')
+            .concat(1, name='yolo_concat3_1')
+            .conv2d_fixed_padding(256, 3, name='yolo_conv3_11')
             .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect3_2'))
         
         (self.feed('detect3_1', 'detect3_2')
-            .contact(1, name='yolo_concat3_2')
-            .detections_boxes(name='boxes3'))
+            .concat(1, name='yolo_concat3_2'))
 
         (self.feed('Mconv7_stage3_L1', 'Mconv7_stage3_L2', 'conv4_4_CPM', 'upsample3_2')
              .concat(3, name='concat_stage4')
@@ -192,8 +186,8 @@ class CmuNetwork(network_base.BaseNetwork):
              .conv(1, 1, 128, 1, 1, name='Mconv6_stage4_L2')
              .conv(1, 1, 19, 1, 1, relu=False, name='Mconv7_stage4_L2'))
 
-        (self.feed('concat_stage4')
-            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv4_1')
+        (self.feed('image')
+            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv4_1', transpose=True)
             .max_pool2d([2, 2], name='pool2_4_1')
             .conv2d_fixed_padding(16*pow(2,1), 3, name='yolo_conv4_2')
             .max_pool2d([2, 2], name='pool2_4_2')
@@ -204,25 +198,23 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(16*pow(2,4), 3, name='yolo_conv4_5')
             .max_pool2d([2, 2], name='pool2_4_5')
             .conv2d_fixed_padding(16*pow(2,5), 3, name='yolo_conv4_6')
-            .max_pool2d([2, 2], name='pool2_4_6')
             .conv2d_fixed_padding(1024, 3, name='yolo_conv4_7')
             .conv2d_fixed_padding(256, 3, name='yolo_conv4_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv4_9')
-            .upsample([None, 128, 23, 23], name='upsample4_1')
-            .upsample([None, 128, 46, 46], anme='upsample4_2', transpose=True))
+            .upsample([None, 128, 26, 26], name='upsample4_1')
+            .upsample([None, 128, 52, 52], name='upsample4_2', transpose=True))
 
         (self.feed('yolo_conv4_8')
             .conv2d_fixed_padding(512, 3, name='yolo_conv4_10')
             .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect4_1'))
 
         (self.feed('yolo_conv4_5', 'upsample4_1')
-            .contact(1, name='yolo_concat4_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv4_11')
+            .concat(1, name='yolo_concat4_1')
+            .conv2d_fixed_padding(256, 3, name='yolo_conv4_11')
             .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect4_2'))
         
         (self.feed('detect4_1', 'detect4_2')
-            .contact(1, name='yolo_concat4_2')
-            .detections_boxes(name='boxes4'))
+            .concat(1, name='yolo_concat4_2'))
 
 
         (self.feed('Mconv7_stage4_L1', 'Mconv7_stage4_L2', 'conv4_4_CPM', 'upsample4_2')
@@ -244,8 +236,8 @@ class CmuNetwork(network_base.BaseNetwork):
              .conv(1, 1, 128, 1, 1, name='Mconv6_stage5_L2')
              .conv(1, 1, 19, 1, 1, relu=False, name='Mconv7_stage5_L2'))
 
-        (self.feed('concat_stage5')
-            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv5_1')
+        (self.feed('image')
+            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv5_1', transpose=True)
             .max_pool2d([2, 2], name='pool2_5_1')
             .conv2d_fixed_padding(16*pow(2,1), 3, name='yolo_conv5_2')
             .max_pool2d([2, 2], name='pool2_5_2')
@@ -256,25 +248,23 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(16*pow(2,4), 3, name='yolo_conv5_5')
             .max_pool2d([2, 2], name='pool2_5_5')
             .conv2d_fixed_padding(16*pow(2,5), 3, name='yolo_conv5_6')
-            .max_pool2d([2, 2], name='pool2_5_6')
             .conv2d_fixed_padding(1024, 3, name='yolo_conv5_7')
             .conv2d_fixed_padding(256, 3, name='yolo_conv5_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv5_9')
-            .upsample([None, 128, 23, 23], name='upsample5_1')
-            .upsample([None, 128, 46, 46], anme='upsample5_2', transpose=True))
+            .upsample([None, 128, 26, 26], name='upsample5_1')
+            .upsample([None, 128, 52, 52], name='upsample5_2', transpose=True))
 
         (self.feed('yolo_conv5_8')
             .conv2d_fixed_padding(512, 3, name='yolo_conv5_10')
             .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect5_1'))
 
         (self.feed('yolo_conv5_5', 'upsample5_1')
-            .contact(1, name='yolo_concat5_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv5_11')
+            .concat(1, name='yolo_concat5_1')
+            .conv2d_fixed_padding(256, 3, name='yolo_conv5_11')
             .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect5_2'))
         
         (self.feed('detect5_1', 'detect5_2')
-            .contact(1, name='yolo_concat5_2')
-            .detections_boxes(name='boxes5'))
+            .concat(1, name='yolo_concat5_2'))
 
         (self.feed('Mconv7_stage5_L1', 'Mconv7_stage5_L2', 'conv4_4_CPM', 'upsample5_2')
              .concat(3, name='concat_stage6')
@@ -295,8 +285,8 @@ class CmuNetwork(network_base.BaseNetwork):
              .conv(1, 1, 128, 1, 1, name='Mconv6_stage6_L2')
              .conv(1, 1, 19, 1, 1, relu=False, name='Mconv7_stage6_L2'))
 
-        (self.feed('concat_stage6')
-            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv6_1')
+        (self.feed('image')
+            .conv2d_fixed_padding(16*pow(2,0), 3, name='yolo_conv6_1', transpose=True)
             .max_pool2d([2, 2], name='pool2_6_1')
             .conv2d_fixed_padding(16*pow(2,1), 3, name='yolo_conv6_2')
             .max_pool2d([2, 2], name='pool2_6_2')
@@ -307,25 +297,23 @@ class CmuNetwork(network_base.BaseNetwork):
             .conv2d_fixed_padding(16*pow(2,4), 3, name='yolo_conv6_5')
             .max_pool2d([2, 2], name='pool2_6_5')
             .conv2d_fixed_padding(16*pow(2,5), 3, name='yolo_conv6_6')
-            .max_pool2d([2, 2], name='pool2_6_6')
             .conv2d_fixed_padding(1024, 3, name='yolo_conv6_7')
             .conv2d_fixed_padding(256, 3, name='yolo_conv6_8')
             .conv2d_fixed_padding(128, 3, name='yolo_conv6_9')
-            .upsample([None, 128, 23, 23], name='upsample6_1')
-            .upsample([None, 128, 46, 46], anme='upsample6_2', transpose=True))
+            .upsample([None, 128, 26, 26], name='upsample6_1')
+            .upsample([None, 128, 52, 52], name='upsample6_2', transpose=True))
     
         (self.feed('yolo_conv6_8')
             .conv2d_fixed_padding(512, 3, name='yolo_conv6_10')
             .detection_layer(80, _ANCHORS[3:6], [416, 416], name='detect6_1'))
 
         (self.feed('yolo_conv6_5', 'upsample6_1')
-            .contact(1, name='yolo_concat6_1')
-            .conv2d_fixed_padding((256, 3), name='yolo_conv6_11')
+            .concat(1, name='yolo_concat6_1')
+            .conv2d_fixed_padding(256, 3, name='yolo_conv6_11')
             .detection_layer(80, _ANCHORS[0:3], [416, 416], name='detect6_2'))
         
         (self.feed('detect6_1', 'detect6_1')
-            .contact(1, name='yolo_concat6_2')
-            .detections_boxes(name='boxes6'))
+            .concat(1, name='yolo_concat6_2'))
 
         with tf.variable_scope('Openpose'):
             (self.feed('Mconv7_stage6_L2', 'Mconv7_stage6_L1', 'upsample6_2')
@@ -340,13 +328,13 @@ class CmuNetwork(network_base.BaseNetwork):
                    l1s.append(self.layers[layer_name])
               if 'Mconv7' in layer_name and '_L2' in layer_name:
                    l2s.append(self.layers[layer_name])
-              if 'boxes' in layer_name:
+              if 'yolo_concat' in layer_name and '_2' in layer_name:
                    l3s.append(self.layers[layer_name])
 
          return l1s, l2s, l3s
 
     def loss_last(self):
-         return self.get_output('Mconv7_stage6_L1'), self.get_output('Mconv7_stage6_L2'), self.get_output('boxes6')
+         return self.get_output('Mconv7_stage6_L1'), self.get_output('Mconv7_stage6_L2'), self.get_output('yolo_concat6_2')
 
     def restorable_variables(self):
          return None
