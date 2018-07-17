@@ -44,7 +44,6 @@ mplset = False
 
 _anchors = [(10,14),  (23,27),  (37,58),  (81,82),  (135,169),  (344,319)]
 _input_shape = [416,416]
-_num_classes = 80
 
 
 class CocoMetadata:
@@ -225,6 +224,7 @@ class CocoMetadata:
 
     def get_bbox(self):
         true_boxes = self.true_boxes
+        print("trueboxes", true_boxes)
         num_layers = len(_anchors)//3
         anchor_mask = [[3,4,5], [0,1,2]]
 
@@ -235,12 +235,12 @@ class CocoMetadata:
         true_boxes[..., 2:4] = boxes_wh/input_shape[::-1]
 
         grid_shapes = [input_shape//{0:32,1:16,2:8}[l] for l in range(num_layers)]
-        y_true = [np.zeros((grid_shapes[l][0], grid_shapes[l][1], len(anchor_mask[l]), (5+num_classes))) for l in range(num_layers)]
+        y_true = [np.zeros((grid_shapes[l][0], grid_shapes[l][1], len(anchor_mask[l]), (85))) for l in range(num_layers)]
         
-        anchors = np.expand_dims(anchors, 0)
+        anchors = np.expand_dims(_anchors, 0)
         anchor_maxes = anchors / 2.
         anchor_mins = -anchor_maxes
-        wh = boxes_wh[b, valid_mask[b]]
+        wh = boxes_wh
 	
         wh = np.expand_dims(wh,-2)
         box_maxes = wh/2
@@ -248,16 +248,17 @@ class CocoMetadata:
 
         #calculate intersection params of box and anchor to calc iou
         intersect_mins = np.maximum(box_mins, anchor_mins)
-        intersect_maxes = np.maximum(box_maxes, anchor_maxes)
+        intersect_maxes = np.minimum(box_maxes, anchor_maxes)
         intersect_wh = np.maximum(intersect_maxes - intersect_mins, 0)
         intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]
         box_area = wh[..., 0] * wh[..., 1]
         anchor_area = anchors[..., 0] * anchors[..., 1]
         iou = intersect_area / (box_area + anchor_area - intersect_area)
+        print("iou", iou)
 		
         #find best anchor for each true box (coco only has one in each image)
         best_anchor = np.argmax(iou, axis=-1)
-        print(best_anchor)
+        print("best_anchor",best_anchor)
 	
         for t,n in enumerate(best_anchor):
             for l in range(num_layers):
@@ -266,14 +267,14 @@ class CocoMetadata:
                     j = np.floor(true_boxes[t,1]*grid_shapes[l][0]).astype('int32')
                     k = anchor_mask[l].index(n)
                     c = true_boxes[t,4].astype('int32')
-                    y_true[l][j, i, k, 0:4] = true_boxes[b,t, 0:4]
+                    y_true[l][j, i, k, 0:4] = true_boxes[t, 0:4]
                     y_true[l][j, i, k, 4] = 1
                     y_true[l][j, i, k, 5+c] = 1
 
         y_13 = y_true[0]
-        y_13 = np.reshape(y_13, (grid_shape[0][0]*grid_shape[0][1]*3,85))
+        y_13 = np.reshape(y_13, (grid_shapes[0][0]*grid_shapes[0][1]*3,85))
         y_26 = y_true[1]
-        y_26 = np.reshape(y_26, (grid_shape[1][0]*grid_shape[1][1]*3,85))
+        y_26 = np.reshape(y_26, (grid_shapes[1][0]*grid_shapes[1][1]*3,85))
         y_true = np.concatenate((y_13, y_26), axis=0)
 
 
@@ -373,6 +374,11 @@ class CocoPose(RNGDataFlow):
 
             anns = self.coco.loadAnns(ann_idx)
             meta = CocoMetadata(idx, img_url, img_meta, anns, sigma=8.0)
+            #print("Here")
+            #print(type(meta))
+            #print(type(meta.get_vectormap(target_size = False)))
+            #print("bbox", np.shape(meta.get_bbox()))
+            
 
             total_keypoints = sum([ann.get('num_keypoints', 0) for ann in anns])
             if total_keypoints == 0 and random.uniform(0, 1) > 0.2:
@@ -476,6 +482,7 @@ class DataFlowToQueue(threading.Thread):
 
         self.ds = ds
         self.placeholders = placeholders
+        print(len(placeholders), "holders")
         self.queue = tf.FIFOQueue(queue_size, [ph.dtype for ph in placeholders], shapes=[ph.get_shape() for ph in placeholders])
         self.op = self.queue.enqueue(placeholders)
         self.close_op = self.queue.close(cancel_pending_enqueues=True)
@@ -512,6 +519,7 @@ class DataFlowToQueue(threading.Thread):
                         self.ds.reset_state()
                         while True:
                             for dp in self.ds.get_data():
+                                print("dp", len(dp))
                                 feed = dict(zip(self.placeholders, dp))
                                 self.op.run(feed_dict=feed)
                                 self.last_dp = dp

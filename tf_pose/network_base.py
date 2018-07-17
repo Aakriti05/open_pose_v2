@@ -274,7 +274,7 @@ class BaseNetwork(object):
             if relu:
                 # ReLU non-linearity
                 output = tf.nn.relu(output, name=scope.name)
-            print(output)
+            #print(output)
             return output
 
     @layer
@@ -381,7 +381,7 @@ class BaseNetwork(object):
 
     @layer
     def conv2d_fixed_padding(self, inputs, filters, kernel_size, name, strides=1, transpose=False):
-        print("entering",inputs)
+        #print("entering",inputs)
         if transpose==True:
             inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
         if strides > 1:
@@ -394,13 +394,13 @@ class BaseNetwork(object):
         'fused': None,  # Use fused batch norm if possible.
         }
         inputs = slim.conv2d(inputs, filters, kernel_size, stride=strides, padding=('SAME' if strides == 1 else 'VALID'), data_format='NCHW', normalizer_fn=slim.batch_norm, normalizer_params=batch_norm_params, biases_initializer=None, activation_fn=lambda x: tf.nn.leaky_relu(x, alpha=_LEAKY_RELU), reuse=False, scope=name)
-        print("exiting", inputs)
+        #print("exiting", inputs)
         return inputs
 
     @layer
     def max_pool2d(self, inputs, filter_size, name, stride=2):        
         inputs = slim.max_pool2d(inputs, filter_size, stride, data_format='NCHW', scope=name)
-        print(inputs)
+        #print(inputs)
         return inputs
 
     @layer
@@ -437,7 +437,7 @@ class BaseNetwork(object):
         inputs = tf.identity(inputs, name=name)
         if transpose == True:
             inputs = tf.transpose(inputs, perm=[0, 2, 3, 1]) # 0 means that dimention will be same as earlier, last 0 will contain the left over dimentions
-        print(inputs)
+        #print(inputs)
         return inputs
 
     def get_size(self, shape, data_format):
@@ -449,11 +449,11 @@ class BaseNetwork(object):
     def detection_layer(self, inputs, num_classes, anchors, img_size, name):
         num_anchors = len(anchors)
         data_format='NCHW'
-        print(inputs)
+        #print(inputs)
         predictions = slim.conv2d(inputs, num_anchors * (5 + num_classes), 1, stride=1, normalizer_fn=None, activation_fn=None, biases_initializer=tf.zeros_initializer(), data_format='NCHW')
         shape = predictions.get_shape().as_list()
         grid_size = self.get_size(shape, data_format)
-        print("grid_size", grid_size)
+        #print("grid_size", grid_size)
         dim = grid_size[0] * grid_size[1]
         bbox_attrs = 5 + num_classes
 
@@ -462,9 +462,9 @@ class BaseNetwork(object):
             predictions = tf.transpose(predictions, [0, 2, 1])
 
         predictions = tf.reshape(predictions, [-1, num_anchors * dim, bbox_attrs])
-        print("img_size", img_size)
+        #print("img_size", img_size)
         stride = (img_size[0] // grid_size[0], img_size[1] // grid_size[1])
-        print("stride", stride)
+        #print("stride", stride)
 
         anchors = [(a[0] / stride[0], a[1] / stride[1]) for a in anchors]
 
@@ -494,7 +494,7 @@ class BaseNetwork(object):
 
         classes = tf.nn.sigmoid(classes)
         predictions = tf.concat([detections, classes], axis=-1, name=name)
-        print(predictions)
+        #print(predictions)
         return predictions
 
     @layer
