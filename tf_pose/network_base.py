@@ -398,8 +398,8 @@ class BaseNetwork(object):
         return inputs
 
     @layer
-    def max_pool2d(self, inputs, filter_size, name, stride=2):        
-        inputs = slim.max_pool2d(inputs, filter_size, stride, data_format='NCHW', scope=name)
+    def max_pool2d(self, inputs, filter_size, name, padding='VALID', stride=2):        
+        inputs = slim.max_pool2d(inputs, filter_size, stride, padding, data_format='NCHW', scope=name)
         #print(inputs)
         return inputs
 
@@ -484,11 +484,11 @@ class BaseNetwork(object):
         x_y_offset = tf.reshape(tf.tile(x_y_offset, [1, num_anchors]), [1, -1, 2])
 
         box_centers = box_centers + x_y_offset
-        box_centers = box_centers * stride
+        box_centers = (box_centers * stride)/416
 
         anchors = tf.tile(anchors, [dim, 1])
         box_sizes = tf.exp(box_sizes) * anchors
-        box_sizes = box_sizes * stride
+        box_sizes = (box_sizes * stride)/416
 
         detections = tf.concat([box_centers, box_sizes, confidence], axis=-1)
 
@@ -496,22 +496,3 @@ class BaseNetwork(object):
         predictions = tf.concat([detections, classes], axis=-1, name=name)
         #print(predictions)
         return predictions
-
-    @layer
-    def detections_boxes(self, inputs, name):
-        """
-		Converts center x, center y, width and height values to coordinates of top left and bottom right points.
-		:param detections: outputs of YOLO v3 detector of shape (?, 10647, (num_classes + 5))
-		:return: converted detections of same shape as input
-		"""
-        center_x, center_y, width, height, attrs = tf.split(inputs, [1, 1, 1, 1, -1], axis=-1)
-        w2 = width / 2
-        h2 = height / 2
-        x0 = center_x - w2
-        y0 = center_y - h2
-        x1 = center_x + w2
-        y1 = center_y + h2
-        boxes = tf.concat([x0, y0, x1, y1], axis=-1)
-        detections = tf.concat([boxes, attrs], axis=-1, name=name)
-        return detections
-	

@@ -261,5 +261,6 @@ def pose_to_img(meta_l):
     return [
         meta_l[0].img.astype(np.float16),
         meta_l[0].get_heatmap(target_size=(_network_w // _scale, _network_h // _scale)),
-        meta_l[0].get_vectormap(target_size=(_network_w // _scale, _network_h // _scale))
+        meta_l[0].get_vectormap(target_size=(_network_w // _scale, _network_h // _scale)), 
+        meta_l[0].get_bbox()
     ]

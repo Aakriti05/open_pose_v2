@@ -159,6 +159,67 @@ class CocoMetadata:
                 heatmap[plane_idx][y][x] = max(heatmap[plane_idx][y][x], math.exp(-exp))
                 heatmap[plane_idx][y][x] = min(heatmap[plane_idx][y][x], 1.0)
 
+    def get_bbox(self):
+        true_boxes = self.true_boxes
+        #print("trueboxes", true_boxes)
+        num_layers = len(_anchors)//3
+        anchor_mask = [[3,4,5], [0,1,2]]
+
+        input_shape = np.array(_input_shape, dtype='int32')
+        boxes_xy = true_boxes[..., :2] + true_boxes[..., 2:4]//2 # calculating the centre
+        boxes_wh = true_boxes[..., 2:4]
+        true_boxes[..., :2] = boxes_xy/input_shape[::-1]
+        true_boxes[..., 2:4] = boxes_wh/input_shape[::-1]
+
+        grid_shapes = [input_shape//{0:32,1:16,2:8}[l] for l in range(num_layers)]
+        y_true = [np.zeros((grid_shapes[l][0], grid_shapes[l][1], len(anchor_mask[l]), (85))) for l in range(num_layers)]
+        
+        anchors = np.expand_dims(_anchors, 0)
+        anchor_maxes = anchors / 2.
+        anchor_mins = -anchor_maxes
+        wh = boxes_wh
+	
+        wh = np.expand_dims(wh,-2)
+        box_maxes = wh/2
+        box_mins = -box_maxes
+
+        #calculate intersection params of box and anchor to calc iou
+        intersect_mins = np.maximum(box_mins, anchor_mins)
+        intersect_maxes = np.minimum(box_maxes, anchor_maxes)
+        intersect_wh = np.maximum(intersect_maxes - intersect_mins, 0)
+        intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]
+        box_area = wh[..., 0] * wh[..., 1]
+        anchor_area = anchors[..., 0] * anchors[..., 1]
+        iou = intersect_area / (box_area + anchor_area - intersect_area)
+        #print("iou", iou)
+		
+        #find best anchor for each true box (coco only has one in each image)
+        best_anchor = np.argmax(iou, axis=-1)
+        #print("best_anchor",best_anchor)
+	
+        for t,n in enumerate(best_anchor):
+            for l in range(num_layers):
+                if n in anchor_mask[l]:
+                    i = np.floor(true_boxes[t,0]*grid_shapes[l][1]).astype('int32')
+                    j = np.floor(true_boxes[t,1]*grid_shapes[l][0]).astype('int32')
+                    k = anchor_mask[l].index(n)
+                    c = true_boxes[t,4].astype('int32')
+                    y_true[l][j, i, k, 0:4] = true_boxes[t, 0:4]
+                    y_true[l][j, i, k, 4] = 1
+                    y_true[l][j, i, k, 5+c] = 1
+
+        y_13 = y_true[0]
+        y_13 = np.reshape(y_13, (grid_shapes[0][0]*grid_shapes[0][1]*3,85))
+        y_26 = y_true[1]
+        y_26 = np.reshape(y_26, (grid_shapes[1][0]*grid_shapes[1][1]*3,85))
+        y_true = np.concatenate((y_13, y_26), axis=0)
+        #print(np.shape(y_true))
+        #print(np.argwhere( y_true >= 416 ))
+        #print(y_true[np.where( y_true >= 416 )])
+        #print(y_true[1])
+        return y_true.astype(np.float16)
+
+
     def get_vectormap(self, target_size):
         vectormap = np.zeros((CocoMetadata.__coco_parts*2, self.height, self.width), dtype=np.float32)
         countmap = np.zeros((CocoMetadata.__coco_parts, self.height, self.width), dtype=np.int16)
@@ -222,66 +283,9 @@ class CocoMetadata:
                 vectormap[plane_idx*2+0][y][x] = vec_x
                 vectormap[plane_idx*2+1][y][x] = vec_y
 
-    def get_bbox(self):
-        true_boxes = self.true_boxes
-        print("trueboxes", true_boxes)
-        num_layers = len(_anchors)//3
-        anchor_mask = [[3,4,5], [0,1,2]]
-
-        input_shape = np.array(_input_shape, dtype='int32')
-        boxes_xy = true_boxes[..., :2] + true_boxes[..., 2:4]//2 # calculating the centre
-        boxes_wh = true_boxes[..., 2:4]
-        true_boxes[..., :2] = boxes_xy/input_shape[::-1]
-        true_boxes[..., 2:4] = boxes_wh/input_shape[::-1]
-
-        grid_shapes = [input_shape//{0:32,1:16,2:8}[l] for l in range(num_layers)]
-        y_true = [np.zeros((grid_shapes[l][0], grid_shapes[l][1], len(anchor_mask[l]), (85))) for l in range(num_layers)]
-        
-        anchors = np.expand_dims(_anchors, 0)
-        anchor_maxes = anchors / 2.
-        anchor_mins = -anchor_maxes
-        wh = boxes_wh
-	
-        wh = np.expand_dims(wh,-2)
-        box_maxes = wh/2
-        box_mins = -box_maxes
-
-        #calculate intersection params of box and anchor to calc iou
-        intersect_mins = np.maximum(box_mins, anchor_mins)
-        intersect_maxes = np.minimum(box_maxes, anchor_maxes)
-        intersect_wh = np.maximum(intersect_maxes - intersect_mins, 0)
-        intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]
-        box_area = wh[..., 0] * wh[..., 1]
-        anchor_area = anchors[..., 0] * anchors[..., 1]
-        iou = intersect_area / (box_area + anchor_area - intersect_area)
-        print("iou", iou)
-		
-        #find best anchor for each true box (coco only has one in each image)
-        best_anchor = np.argmax(iou, axis=-1)
-        print("best_anchor",best_anchor)
-	
-        for t,n in enumerate(best_anchor):
-            for l in range(num_layers):
-                if n in anchor_mask[l]:
-                    i = np.floor(true_boxes[t,0]*grid_shapes[l][1]).astype('int32')
-                    j = np.floor(true_boxes[t,1]*grid_shapes[l][0]).astype('int32')
-                    k = anchor_mask[l].index(n)
-                    c = true_boxes[t,4].astype('int32')
-                    y_true[l][j, i, k, 0:4] = true_boxes[t, 0:4]
-                    y_true[l][j, i, k, 4] = 1
-                    y_true[l][j, i, k, 5+c] = 1
-
-        y_13 = y_true[0]
-        y_13 = np.reshape(y_13, (grid_shapes[0][0]*grid_shapes[0][1]*3,85))
-        y_26 = y_true[1]
-        y_26 = np.reshape(y_26, (grid_shapes[1][0]*grid_shapes[1][1]*3,85))
-        y_true = np.concatenate((y_13, y_26), axis=0)
-
-
-        print(np.shape(y_true))
-        return y_true.astype(np.float16)
-
+    
 class CocoPose(RNGDataFlow):
+    
     @staticmethod
     def display_image(inp, heatmap, vectmap, as_numpy=False):
         global mplset
@@ -328,6 +332,7 @@ class CocoPose(RNGDataFlow):
             fig.clear()
             plt.close()
             return data
+   
 
     @staticmethod
     def get_bgimg(inp, target_size=None):
@@ -374,17 +379,12 @@ class CocoPose(RNGDataFlow):
 
             anns = self.coco.loadAnns(ann_idx)
             meta = CocoMetadata(idx, img_url, img_meta, anns, sigma=8.0)
-            #print("Here")
-            #print(type(meta))
-            #print(type(meta.get_vectormap(target_size = False)))
-            #print("bbox", np.shape(meta.get_bbox()))
-            
+                     
 
             total_keypoints = sum([ann.get('num_keypoints', 0) for ann in anns])
             if total_keypoints == 0 and random.uniform(0, 1) > 0.2:
-
                 continue
-
+            
             yield [meta]
 
 
@@ -430,6 +430,7 @@ def read_image_url(metas):
 
 def get_dataflow(path, is_train, img_path=None):
     ds = CocoPose(path, img_path, is_train)       # read data from lmdb
+    print("ds of dataflow", ds)
     if is_train:
         ds = MapData(ds, read_image_url)
         ds = MapDataComponent(ds, pose_random_scale)
@@ -466,9 +467,12 @@ def _get_dataflow_onlyread(path, is_train, img_path=None):
 def get_dataflow_batch(path, is_train, batchsize, img_path=None):
     logger.info('dataflow img_path=%s' % img_path)
     ds = get_dataflow(path, is_train, img_path=img_path)
+    print("ds from get_dataflow", ds)
     ds = BatchData(ds, batchsize)
+    print("ds from batchdata", ds)
     if is_train:
-        ds = PrefetchData(ds, 10, 2)
+        ds = PrefetchData(ds, 10, 3)
+        print("ds from preferchdata", ds)
     else:
         ds = PrefetchData(ds, 50, 2)
 
@@ -519,7 +523,7 @@ class DataFlowToQueue(threading.Thread):
                         self.ds.reset_state()
                         while True:
                             for dp in self.ds.get_data():
-                                print("dp", len(dp))
+                                #print("dp", len(dp))
                                 feed = dict(zip(self.placeholders, dp))
                                 self.op.run(feed_dict=feed)
                                 self.last_dp = dp

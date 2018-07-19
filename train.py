@@ -35,8 +35,8 @@ if __name__ == '__main__':
     parser.add_argument('--imgpath', type=str, default='/mnt/HDD20TB/akki/tfopenpose/aakriti/')#/data/public/rw/coco/
     parser.add_argument('--batchsize', type=int, default=16)
     parser.add_argument('--gpus', type=int, default=2)
-    parser.add_argument('--max_epoch', type=int, default=3)
-    parser.add_argument('--lr', type=str, default='0.01')
+    parser.add_argument('--max_epoch', type=int, default=300)
+    parser.add_argument('--lr', type=str, default='0.00025')
     parser.add_argument('--modelpath', type=str, default='data/private/tf-openpose-models-2018-2/')
     parser.add_argument('--logpath', type=str, default='data/private/tf-openpose-log-2018-2/')
     parser.add_argument('--checkpoint', type=str, default='')
@@ -67,7 +67,7 @@ if __name__ == '__main__':
         input_node = tf.placeholder(tf.float32, shape=(args.batchsize, args.input_height, args.input_width, 3), name='image')
         vectmap_node = tf.placeholder(tf.float32, shape=(args.batchsize, output_h, output_w, 38), name='vectmap')
         heatmap_node = tf.placeholder(tf.float32, shape=(args.batchsize, output_h, output_w, 19), name='heatmap')
-        object_node = tf.placeholder(tf.float32, shape=(args.batchsize, 1662, 85), name='yolo_out')
+        object_node = tf.placeholder(tf.float32, shape=(args.batchsize, 2535, 85), name='yolo_out')
 
         # prepare data
         if not args.remote_data:
@@ -118,8 +118,8 @@ if __name__ == '__main__':
                 for idx, (l1, l2, l3) in enumerate(zip(l1s, l2s, l3s)):
                     loss_l1 = tf.nn.l2_loss(tf.concat(l1, axis=0) - q_vect_split[gpu_id], name='loss_l1_stage%d_tower%d' % (idx, gpu_id))
                     loss_l2 = tf.nn.l2_loss(tf.concat(l2, axis=0) - q_heat_split[gpu_id], name='loss_l2_stage%d_tower%d' % (idx, gpu_id))
-                    loss_l3 = tf.nn.l2_loss(tf.concat(l3, axis=0) - q_obj_split[gpu_id], name='loss_l3_stage%d_tower%d' % (idx, gpu_id))
-                    losses.append(tf.reduce_mean([loss_l1, loss_l2, loss_l3]))
+                    loss_l3 = tf.nn.sigmoid_cross_entropy_with_logits(labels=q_obj_split[gpu_id], logits=tf.concat(l3, axis=0), name='loss_l3_stage%d_tower%d' % (idx, gpu_id))
+                    losses.append(tf.reduce_mean([loss_l1, loss_l2]))
 
                 last_losses_l1.append(loss_l1)
                 last_losses_l2.append(loss_l2)
@@ -132,8 +132,8 @@ if __name__ == '__main__':
         total_loss = tf.reduce_sum(losses) / args.batchsize
         total_loss_ll_paf = tf.reduce_sum(last_losses_l1) / args.batchsize
         total_loss_ll_heat = tf.reduce_sum(last_losses_l2) / args.batchsize
-        total_loss_l3_obj = tf.reduce_sum(last_losses_l3) / args.batchsize
-        total_loss_ll = tf.reduce_mean([total_loss_ll_paf, total_loss_ll_heat, total_loss_l3_obj])
+        total_loss_ll_obj = tf.reduce_sum(last_losses_l3) / args.batchsize
+        total_loss_ll = tf.reduce_mean([total_loss_ll_paf, total_loss_ll_heat, total_loss_ll_obj])
 
         # define optimizer
         step_per_epoch = 121745 // args.batchsize
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     tf.summary.scalar("loss_lastlayer", total_loss_ll)
     tf.summary.scalar("loss_lastlayer_paf", total_loss_ll_paf)
     tf.summary.scalar("loss_lastlayer_heat", total_loss_ll_heat)
-    tf.summary.scalar("loss_lastlayer_obj", total_loss_l3_obj)
+    tf.summary.scalar("loss_lastlayer_obj", total_loss_ll_obj)
 
     tf.summary.scalar("queue_size", enqueuer.size())
     merged_summary_op = tf.summary.merge_all()
