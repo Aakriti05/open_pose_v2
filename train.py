@@ -17,7 +17,9 @@ from tf_pose.pose_augment import set_network_input_wh, set_network_scale
 from tf_pose.common import get_sample_images
 from tf_pose.networks import get_network
 
+from tf_pose.yolo_loss import yolo_loss #modified
 
+from pycocotools.coco import COCO
 
 logger = logging.getLogger('train')
 logger.setLevel(logging.DEBUG)
@@ -35,11 +37,11 @@ if __name__ == '__main__':
     parser.add_argument('--imgpath', type=str, default='/mnt/HDD20TB/akki/tfopenpose/aakriti/')#/data/public/rw/coco/
     parser.add_argument('--batchsize', type=int, default=16)
     parser.add_argument('--gpus', type=int, default=2)
-    parser.add_argument('--max_epoch', type=int, default=300)
+    parser.add_argument('--max_epoch', type=int, default=1)
     parser.add_argument('--lr', type=str, default='0.00025')
     parser.add_argument('--modelpath', type=str, default='data/private/tf-openpose-models-2018-2/')
     parser.add_argument('--logpath', type=str, default='data/private/tf-openpose-log-2018-2/')
-    parser.add_argument('--checkpoint', type=str, default='')
+    parser.add_argument('--checkpoint', type=str, default='data/private/tf-openpose-models-2018-2/cmu_batch:16_lr:0.00025_gpus:2_416x416_/')
     parser.add_argument('--tag', type=str, default='')
     parser.add_argument('--remote_data', type=str, default='', help='eg. tcp://0.0.0.0:1027')
 
@@ -118,7 +120,8 @@ if __name__ == '__main__':
                 for idx, (l1, l2, l3) in enumerate(zip(l1s, l2s, l3s)):
                     loss_l1 = tf.nn.l2_loss(tf.concat(l1, axis=0) - q_vect_split[gpu_id], name='loss_l1_stage%d_tower%d' % (idx, gpu_id))
                     loss_l2 = tf.nn.l2_loss(tf.concat(l2, axis=0) - q_heat_split[gpu_id], name='loss_l2_stage%d_tower%d' % (idx, gpu_id))
-                    loss_l3 = tf.nn.sigmoid_cross_entropy_with_logits(labels=q_obj_split[gpu_id], logits=tf.concat(l3, axis=0), name='loss_l3_stage%d_tower%d' % (idx, gpu_id))
+                    #loss_l3 = tf.nn.sigmoid_cross_entropy_with_logits(labels=q_obj_split[gpu_id], logits=tf.concat(l3, axis=0), name='loss_l3_stage%d_tower%d' % (idx, gpu_id))
+                    loss_l3 = yolo_loss(tf.concat(l3, axis=0), q_obj_split[gpu_id]) # modified
                     losses.append(tf.reduce_mean([loss_l1, loss_l2]))
 
                 last_losses_l1.append(loss_l1)
@@ -190,12 +193,16 @@ if __name__ == '__main__':
         )
         logger.info('model weights initialization')
         sess.run(tf.global_variables_initializer())
-        '''
+
+        tf.train.write_graph(sess.graph_def, '.', 'mine.pbtxt') 
+
         if args.checkpoint:
             logger.info('Restore from checkpoint...')
-            # loader = tf.train.Saver(net.restorable_variables())
-            # loader.restore(sess, tf.train.latest_checkpoint(args.checkpoint))
-            saver.restore(sess, tf.train.latest_checkpoint(args.checkpoint))
+            #loader = tf.train.Saver(net.restorable_variables())
+            #loader.restore(sess, tf.train.latest_checkpoint(args.checkpoint))
+            ckpt = tf.train.get_checkpoint_state(checkpoint_dir=args.checkpoint)
+            print(tf.train.latest_checkpoint(args.checkpoint))
+            saver.restore(sess, ckpt.model_checkpoint_path)
             logger.info('Restore from checkpoint...Done')
         elif pretrain_path:
             logger.info('Restore pretrained weights...')
@@ -205,7 +212,7 @@ if __name__ == '__main__':
             elif '.npy' in pretrain_path:
                 net.load(pretrain_path, sess, False)
             logger.info('Restore pretrained weights...Done')
-        '''
+
         logger.info('prepare file writer')
         file_writer = tf.summary.FileWriter(args.logpath + training_name, sess.graph)
 
@@ -225,7 +232,7 @@ if __name__ == '__main__':
             if gs_num > step_per_epoch * args.max_epoch:
                 break
 
-            if gs_num - last_gs_num >= 100:
+            if gs_num - last_gs_num >= 1:
                 train_loss, train_loss_ll, train_loss_ll_paf, train_loss_ll_heat, train_loss_ll_obj, lr_val, summary, queue_size = sess.run([total_loss, total_loss_ll, total_loss_ll_paf, total_loss_ll_heat, total_loss_ll_obj, learning_rate, merged_summary_op, enqueuer.size()])
 
                 # log of training loss / accuracy
@@ -235,7 +242,7 @@ if __name__ == '__main__':
 
                 file_writer.add_summary(summary, gs_num)
 
-            if gs_num - last_gs_num2 >= 1000:
+            if gs_num - last_gs_num2 >= 2:
                 # save weights
                 saver.save(sess, os.path.join(args.modelpath, training_name, 'model'), global_step=global_step)
 
